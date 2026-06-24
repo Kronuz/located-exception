@@ -1,6 +1,6 @@
 // Smoke test for the standalone located-exception library.
-// Build (no fmt):  c++ -std=c++17 -DWITHOUT_FMT -I.. test.cc ../exception.cc -o test && ./test
-// Build (w/ fmt):  c++ -std=c++17 -I.. -I<fmt>/include -DFMT_HEADER_ONLY test.cc ../exception.cc -o test && ./test
+// Build:            c++ -std=c++20 -I.. test.cc ../exception.cc -o test && ./test
+// Passthrough:      c++ -std=c++17 -DWITHOUT_FORMAT -I.. test.cc ../exception.cc -o test && ./test
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -27,8 +27,8 @@ int main() {
 		const std::runtime_error& re = e;
 		assert(std::strcmp(re.what(), "boom") == 0);
 
-#ifndef WITHOUT_FMT
-		// Format-string interpolation (std::format by default, or {fmt}).
+#ifndef WITHOUT_FORMAT
+		// Format-string interpolation via std::format.
 		try {
 			THROW(OutOfRange, "value {} out of range [{}, {}]", 7, 0, 5);
 		} catch (const OutOfRange& oe) {
@@ -41,7 +41,7 @@ int main() {
 		std::printf("FAIL: interpolating throw was not caught\n");
 		return 1;
 #else
-		std::printf("located-exception OK (WITHOUT_FMT): %s\n", e.get_context());
+		std::printf("located-exception OK (WITHOUT_FORMAT): %s\n", e.get_context());
 		return 0;
 #endif
 	}

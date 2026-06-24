@@ -10,11 +10,8 @@ target_include_directories(located_exception PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # selected on both sides.
 target_compile_features(located_exception PUBLIC cxx_std_20)
 
-# Optional: to use the {fmt} library instead of std::format, link it and the
-# header picks it up automatically:
-#   find_package(fmt REQUIRED)
-#   target_link_libraries(located_exception PUBLIC fmt::fmt)
-# Or define WITHOUT_FMT (PUBLIC) to drop interpolation entirely.
+# For a pre-C++20 toolchain without <format>, define WITHOUT_FORMAT (PUBLIC) to
+# drop interpolation entirely (messages are stored as the raw format string).
 
 # Build the smoke test only when this repo is the top-level project.
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
