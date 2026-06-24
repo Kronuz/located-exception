@@ -3,18 +3,18 @@ project(located_exception LANGUAGES CXX)
 
 add_library(located_exception exception.cc)
 target_include_directories(located_exception PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_features(located_exception PUBLIC cxx_std_17)
 
-# Use {fmt} for format-string interpolation in THROW(...) if it's available;
-# otherwise fall back to a zero-dependency, no-interpolation mode. The toggle is
-# PUBLIC so it stays consistent across this library and every consumer (the
-# declared types in exception.h depend on it).
-find_package(fmt QUIET)
-if(fmt_FOUND)
-  target_link_libraries(located_exception PUBLIC fmt::fmt)
-else()
-  target_compile_definitions(located_exception PUBLIC WITHOUT_FMT)
-endif()
+# C++20 so message formatting uses std::format with no third-party dependency.
+# The standard is PUBLIC so consumers compile with it too, which keeps the same
+# formatting backend (and therefore the same declared types in exception.h)
+# selected on both sides.
+target_compile_features(located_exception PUBLIC cxx_std_20)
+
+# Optional: to use the {fmt} library instead of std::format, link it and the
+# header picks it up automatically:
+#   find_package(fmt REQUIRED)
+#   target_link_libraries(located_exception PUBLIC fmt::fmt)
+# Or define WITHOUT_FMT (PUBLIC) to drop interpolation entirely.
 
 # Build the smoke test only when this repo is the top-level project.
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

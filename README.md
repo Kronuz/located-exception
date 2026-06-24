@@ -1,20 +1,20 @@
 # located-exception
 
-A C++17 exception base that remembers where it was thrown and formats its message with {fmt}.
+A C++20 exception base that remembers where it was thrown and formats its message with `std::format`, no third-party dependency.
 
 ## What it is
 
-`located-exception` is a small exception hierarchy that captures the throw site (function, file, line) at the point you throw, and formats the message with {fmt}-style interpolation. The standard library hands you the message back through `what()`; this adds *where* it came from, plus typed, formatted messages, without you having to thread `__FILE__`/`__LINE__` through by hand. When you rethrow to add context, it keeps pointing at the original throw site instead of the rethrow.
+`located-exception` is a small exception hierarchy that captures the throw site (function, file, line) at the point you throw, and formats the message with `std::format`-style interpolation. On C++20 it uses `std::format` and pulls in nothing extra. The standard library hands you the message back through `what()`; this adds *where* it came from, plus typed, formatted messages, without you having to thread `__FILE__`/`__LINE__` through by hand. When you rethrow to add context, it keeps pointing at the original throw site instead of the rethrow.
 
 ## When to use it / when not
 
 Use it when you want exceptions that carry their origin (handy for logging and error reports), when you want formatted messages without building strings at every throw site, and when you want one throw to be catchable as both your own type and the matching `std::` exception. It is a good fit for servers and tools where an error needs to say where it happened, not just what happened.
 
-It is not a stack-trace library. It captures a single site (the throw, or the original throw across a rethrow chain), not a full backtrace. If you need the whole stack, reach for a proper backtrace facility. It also pulls in {fmt} unless you opt out, so if you have a hard no-dependency constraint and don't want even the fallback path, this may be more than you need.
+It is not a stack-trace library. It captures a single site (the throw, or the original throw across a rethrow chain), not a full backtrace. If you need the whole stack, reach for a proper backtrace facility.
 
 ## Install
 
-This is not header-only. It ships a compiled translation unit, `exception.cc`, plus the header `exception.h`. You build and link the `.cc`; including the header alone won't give you the out-of-line constructor, `get_message()`, or `get_context()`.
+This is not header-only. It ships a compiled translation unit, `exception.cc`, plus the header `exception.h`. You build and link the `.cc`; including the header alone won't give you the out-of-line constructor, `get_message()`, or `get_context()`. It requires C++20 for the default `std::format` backend.
 
 With CMake `FetchContent`:
 
@@ -30,11 +30,22 @@ FetchContent_MakeAvailable(located_exception)
 target_link_libraries(your_target PRIVATE located_exception)
 ```
 
-### fmt is optional
+`CMakeLists.txt` requests `cxx_std_20` `PUBLIC`, so consumers compile with C++20 too and `std::format` is selected on both sides with no extra dependency.
 
-The build probes for {fmt} with `find_package(fmt QUIET)`. If it is found, the target links `fmt::fmt` and format strings are interpolated. If it is not found, the build defines `WITHOUT_FMT` instead, which drops the dependency and passes the format string through literally (no interpolation, args ignored). See CMakeLists.txt:12-17.
+### Backend options
 
-That toggle is propagated `PUBLIC`. It has to be: `WITHOUT_FMT` changes the declared types in `exception.h` (`format_args` becomes `void*`, see exception.h:31-46), so the library and every consumer must agree on it or you get ABI mismatches. Let CMake set it; do not flip it per-consumer.
+The formatting backend is picked automatically in `exception.h` (exception.h:37-56): `std::format` when `<format>` and `__cpp_lib_format` are available (the C++20 default), else {fmt} if `<fmt/format.h>` is on the include path, else a no-op passthrough that returns the format string uninterpolated.
+
+If you'd rather use {fmt} (for example, on a C++17 toolchain that lacks `std::format`), link it and the header picks it up automatically:
+
+```cmake
+find_package(fmt REQUIRED)
+target_link_libraries(located_exception PUBLIC fmt::fmt)
+```
+
+Define `WITHOUT_FMT` `PUBLIC` to force the passthrough and drop interpolation entirely (the format string is returned literally, args ignored).
+
+The chosen backend changes the declared types in `exception.h` (`format_args` is `std::format_args`, `fmt::format_args`, or `const void*`, see exception.h:37-56), so the library and every consumer must agree on it or you get ABI mismatches. Keeping the C++ standard `PUBLIC` is what keeps the choice consistent; let CMake set it, do not flip it per-consumer.
 
 ## Usage
 
@@ -45,7 +56,7 @@ void f() {
     // Plain message.
     THROW(Error, "boom");
 
-    // With {fmt} interpolation (when fmt is available).
+    // With interpolation (std::format by default, or {fmt}).
     THROW(InvalidArgument, "expected {} args, got {}", 2, n);
 }
 
@@ -103,8 +114,8 @@ Because each type multiply-inherits both `BaseException` and a `std::` exception
 
 ### Macros
 
-- `THROW(type, ...)` — throws `type`, constructed with `__func__`, `__FILE__`, `__LINE__`, the stringized type name (`#type`), and the format string plus args. See exception.h:144.
-- `RETHROW(type, ...)` — same, but passes the in-scope `exc` first so the new exception inherits the *original* throw location instead of the rethrow site. See exception.h:145. The variable in scope must be named `exc`.
+- `THROW(type, ...)` — throws `type`, constructed with `__func__`, `__FILE__`, `__LINE__`, the stringized type name (`#type`), and the format string plus args. See exception.h:154.
+- `RETHROW(type, ...)` — same, but passes the in-scope `exc` first so the new exception inherits the *original* throw location instead of the rethrow site. See exception.h:155. The variable in scope must be named `exc`.
 
 ## Build & test
 
@@ -118,11 +129,14 @@ ctest --test-dir build
 You can also build the smoke test directly (the commands are in the header comment of test/test.cc:2-3):
 
 ```sh
-# Zero-dependency fallback, no fmt.
-c++ -std=c++17 -DWITHOUT_FMT -I.. test/test.cc exception.cc -o test && ./test
+# Default: std::format on C++20, no dependency.
+c++ -std=c++20 -I.. test/test.cc exception.cc -o test && ./test
 
-# With fmt (header-only).
+# {fmt} fallback (header-only), useful on C++17 toolchains.
 c++ -std=c++17 -I.. -I<fmt>/include -DFMT_HEADER_ONLY test/test.cc exception.cc -o test && ./test
+
+# Zero-interpolation passthrough.
+c++ -std=c++20 -DWITHOUT_FMT -I.. test/test.cc exception.cc -o test && ./test
 ```
 
 The test asserts the captured filename/line/function, the message, the `" at "` context format, and that the type is also a real `std::runtime_error` (test/test.cc:10-35).
@@ -130,14 +144,14 @@ The test asserts the captured filename/line/function, the message, the `" at "` 
 ## Notes & caveats
 
 - Not header-only. You must compile and link `exception.cc`.
-- `WITHOUT_FMT` is part of the ABI. It changes the declared types in the header, so it must be identical across the library and all consumers. CMake propagates it `PUBLIC` for exactly this reason; don't override it per-target.
-- Under `WITHOUT_FMT` the format string is passed through verbatim and the args are dropped. No interpolation happens, so `"{}"` stays literal.
+- The formatting backend is part of the ABI. It changes the declared types in the header, so it must be identical across the library and all consumers. The choice is keyed on the C++ standard and header availability (`std::format` on C++20, else {fmt}, else passthrough), and CMake keeps the standard `PUBLIC` for exactly this reason; don't compile the library and a consumer with different standards or `WITHOUT_FMT` settings.
+- Under the passthrough backend (`WITHOUT_FMT`, or no `std::format`/{fmt} available) the format string is passed through verbatim and the args are dropped. No interpolation happens, so `"{}"` stays literal.
 - `RETHROW` reads a hardcoded `exc` from the enclosing scope. Name your caught exception `exc` or it won't compile.
 - The captured pointers (`function`, `filename`) come from `__func__`/`__FILE__` string literals, which have static storage, so they stay valid for the lifetime of the exception.
 
 ## Provenance
 
-Extracted from [Xapiand](https://github.com/Kronuz/Xapiand) and turned into a standalone, generic library. Compared to the original: the {fmt} include was retargeted from a vendored `"fmt/format.h"` to the standard `<fmt/format.h>`; the Xapiand-specific subclasses (`ClientError`, `MissingTypeError`, `QueryDslError`) were dropped to keep it generic; and the constructors were fixed to compile against modern {fmt} (fmt >= 10 needs lvalues in `make_format_args`, so they no longer `std::forward` into it). Verified against current header-only {fmt} and the `WITHOUT_FMT` fallback.
+Extracted from [Xapiand](https://github.com/Kronuz/Xapiand) and turned into a standalone, generic library. Compared to the original: the formatting backend now defaults to `std::format` on C++20 with no third-party dependency, falling back to {fmt} (retargeted from a vendored `"fmt/format.h"` to the standard `<fmt/format.h>`) and then to a passthrough; the Xapiand-specific subclasses (`ClientError`, `MissingTypeError`, `QueryDslError`) were dropped to keep it generic; and the constructors pass lvalues into `make_format_args` (required by both `std::format` and modern {fmt} >= 10), so they no longer `std::forward` into it. Verified in all three modes: `std::format` (C++20, default), header-only {fmt} (C++17), and the `WITHOUT_FMT` passthrough.
 
 ## License
 

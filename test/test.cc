@@ -27,8 +27,23 @@ int main() {
 		const std::runtime_error& re = e;
 		assert(std::strcmp(re.what(), "boom") == 0);
 
-		std::printf("located-exception OK: %s\n", e.get_context());
+#ifndef WITHOUT_FMT
+		// Format-string interpolation (std::format by default, or {fmt}).
+		try {
+			THROW(OutOfRange, "value {} out of range [{}, {}]", 7, 0, 5);
+		} catch (const OutOfRange& oe) {
+			assert(std::strcmp(oe.get_message(), "value 7 out of range [0, 5]") == 0);
+			const std::out_of_range& se = oe;
+			assert(std::strcmp(se.what(), "value 7 out of range [0, 5]") == 0);
+			std::printf("located-exception OK: %s | %s\n", e.get_context(), oe.get_message());
+			return 0;
+		}
+		std::printf("FAIL: interpolating throw was not caught\n");
+		return 1;
+#else
+		std::printf("located-exception OK (WITHOUT_FMT): %s\n", e.get_context());
 		return 0;
+#endif
 	}
 	std::printf("FAIL: exception was not thrown/caught\n");
 	return 1;

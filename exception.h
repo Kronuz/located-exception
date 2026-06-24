@@ -28,21 +28,31 @@
 #include <type_traits>        // for std::forward
 #include <vector>             // for std::vector
 
-#ifdef WITHOUT_FMT
-	using format_args = void*;
-	template <typename... Args>
-	void* make_format_args(Args&&...) {
-		return nullptr;
-	}
-	template <typename... Args>
-	std::string vformat(std::string_view format_str, Args&&...) {
-		return std::string(format_str);
-	}
-#else
+// Message-formatting backend, chosen automatically: std::format (C++20) when
+// available, then {fmt} if its header is present, then a no-op passthrough that
+// returns the format string uninterpolated. Define WITHOUT_FMT to force the
+// passthrough. The chosen backend changes the declared types below, so it must
+// be consistent across this library and every consumer (CMake propagates the
+// C++ standard PUBLIC to keep std::format selected on both sides).
+#if !defined(WITHOUT_FMT) && defined(__cpp_lib_format) && __has_include(<format>)
+	#include <format>
+	using std::format_args;
+	using std::make_format_args;
+	using std::vformat;
+#elif !defined(WITHOUT_FMT) && __has_include(<fmt/format.h>)
 	#include <fmt/format.h>       // for fmt::format_args, fmt::vformat, fmt::make_format_args
 	using fmt::format_args;
 	using fmt::make_format_args;
 	using fmt::vformat;
+#else
+	using format_args = const void*;
+	template <typename... Args>
+	const void* make_format_args(Args&&...) {
+		return nullptr;
+	}
+	inline std::string vformat(std::string_view format_str, const void*) {
+		return std::string(format_str);
+	}
 #endif
 
 
