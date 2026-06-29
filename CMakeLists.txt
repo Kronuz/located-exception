@@ -19,4 +19,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   add_executable(located_exception_test test/test.cc)
   target_link_libraries(located_exception_test PRIVATE located_exception)
   add_test(NAME located_exception COMMAND located_exception_test)
+
+  # A runnable tour of the library (not a test): build & run ./build/located_exception_demo
+  add_executable(located_exception_demo examples/demo.cc)
+  target_link_libraries(located_exception_demo PRIVATE located_exception)
 endif()

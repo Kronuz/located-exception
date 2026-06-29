@@ -139,6 +139,25 @@ The test asserts the captured filename/line/function, the message, the `" at "` 
 - `RETHROW` reads a hardcoded `exc` from the enclosing scope. Name your caught exception `exc` or it won't compile.
 - The captured pointers (`function`, `filename`) come from `__func__`/`__FILE__` string literals, which have static storage, so they stay valid for the lifetime of the exception.
 
+## Examples
+
+[`examples/demo.cc`](examples/demo.cc) is a runnable tour. A top-level CMake build
+produces it next to the test:
+
+```sh
+cmake -B build && cmake --build build && ./build/located_exception_demo
+```
+
+It throws an `Error` from a helper, catches it, and prints where it came from
+(`filename:line (function)` and the pre-formatted `get_context()`), then throws a
+bare `std::runtime_error` with the same message to show what a plain
+`std::exception` leaves out: the message and nothing about the origin. It catches
+an `OutOfRange` through its `std::out_of_range` base to show the dual identity
+(one throw, catchable as your type or the matching `std::` type) and the
+`std::format` interpolation in the message. It closes on a `RETHROW` chain: a
+mid-level handler wraps the failure with higher-level context, and the caught
+exception still points at the original throw site, not the rethrow line.
+
 ## Provenance
 
 Extracted from [Xapiand](https://github.com/Kronuz/Xapiand) and turned into a standalone, generic library. Compared to the original: the formatting backend now defaults to `std::format` on C++20 with no third-party dependency, falling back to a passthrough; the previous {fmt} fallback was dropped entirely. The Xapiand-specific subclasses (`ClientError`, `MissingTypeError`, `QueryDslError`) were dropped to keep it generic, and the constructors pass lvalues into `make_format_args` (required by `std::format`), so they no longer `std::forward` into it. Verified in both modes: `std::format` (C++20, default) interpolates `"value 7 out of range [0, 5]"`, and the `WITHOUT_FORMAT` passthrough returns the literal format string.
