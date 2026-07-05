@@ -26,6 +26,7 @@
 #include <string>             // for std::string
 #include <string_view>        // for std::string_view
 #include <type_traits>        // for std::forward
+#include <version>            // for __cpp_lib_format (feature-test macros)
 #include <vector>             // for std::vector
 
 // Message formatting uses std::format (C++20). If <format> is unavailable (or
@@ -33,6 +34,9 @@
 // the format string uninterpolated. The chosen backend changes the declared
 // types below, so it must be consistent across this library and every consumer
 // (CMake propagates the C++ standard PUBLIC to keep std::format on both sides).
+// <version> above is what makes __cpp_lib_format visible before this check: the
+// feature-test macro lives there, so without it libstdc++ (which, unlike libc++,
+// doesn't leak it in through other headers) would silently pick the passthrough.
 #if !defined(WITHOUT_FORMAT) && defined(__cpp_lib_format) && __has_include(<format>)
 	#include <format>
 	using std::format_args;
@@ -58,7 +62,7 @@ class BaseException {
 
 	struct private_ctor {};
 
-	BaseException(private_ctor, const BaseException& exc, const char *function_, const char *filename_, int line_, const char* type, std::string_view format, format_args args);
+	BaseException(private_ctor, const BaseException& exc, const char *function_, const char *filename_, int line_, const char* type, std::string message_);
 
 protected:
 	std::string type;
@@ -80,21 +84,21 @@ public:
 
 	template <typename... Args>
 	BaseException(const char *function, const char *filename, int line, const char* type, std::string_view format, Args&&... args)
-		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, format, make_format_args(args...)) { }
+		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, vformat(format, make_format_args(args...))) { }
 	template <typename T, typename... Args, typename = std::enable_if_t<std::is_base_of<BaseException, std::decay_t<T>>::value>>
 	BaseException(const T* exc, const char *function, const char *filename, int line, const char* type, std::string_view format, Args&&... args)
-		: BaseException(private_ctor{}, *exc, function, filename, line, type, format, make_format_args(args...)) { }
+		: BaseException(private_ctor{}, *exc, function, filename, line, type, vformat(format, make_format_args(args...))) { }
 	template <typename... Args>
 	BaseException(const void*, const char *function, const char *filename, int line, const char* type, std::string_view format, Args&&... args)
-		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, format, make_format_args(args...)) { }
+		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, vformat(format, make_format_args(args...))) { }
 
 	BaseException(const char *function, const char *filename, int line, const char* type, std::string_view msg = "")
-		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, msg, make_format_args()) { }
+		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, vformat(msg, make_format_args())) { }
 	template <typename T, typename = std::enable_if_t<std::is_base_of<BaseException, std::decay_t<T>>::value>>
 	BaseException(const T* exc, const char *function, const char *filename, int line, const char* type, std::string_view msg = "")
-		: BaseException(private_ctor{}, *exc, function, filename, line, type, msg, make_format_args()) { }
+		: BaseException(private_ctor{}, *exc, function, filename, line, type, vformat(msg, make_format_args())) { }
 	BaseException(const void*, const char *function, const char *filename, int line, const char* type, std::string_view msg = "")
-		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, msg, make_format_args()) { }
+		: BaseException(private_ctor{}, default_exc(), function, filename, line, type, vformat(msg, make_format_args())) { }
 
 	const char* get_message() const;
 	const char* get_context() const;
