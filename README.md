@@ -1,5 +1,7 @@
 # located-exception
 
+[![CI](https://github.com/Kronuz/located-exception/actions/workflows/ci.yml/badge.svg)](https://github.com/Kronuz/located-exception/actions/workflows/ci.yml)
+
 A C++20 exception base that remembers where it was thrown and formats its message with `std::format`, no third-party dependency.
 
 ## What it is
