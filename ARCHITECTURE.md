@@ -4,7 +4,7 @@ This describes the internals of `located-exception`: how the throw site is captu
 
 ## Capturing the throw site
 
-The capture happens entirely in the macros, expanded at the call site (exception.h:148-149):
+The capture happens entirely in the macros, expanded at the call site:
 
 ```cpp
 #define THROW(exception, ...)   throw exception(__func__, __FILE__, __LINE__, #exception, ##__VA_ARGS__)
@@ -17,7 +17,7 @@ The capture happens entirely in the macros, expanded at the call site (exception
 
 ## The constructor overload set
 
-`BaseException` exposes several public constructor templates. They all funnel into one private constructor that does the real work (exception.h:61, exception.cc:60-67):
+`BaseException` exposes several public constructor templates. They all funnel into one private constructor that does the real work:
 
 ```cpp
 BaseException(private_ctor, const BaseException& exc,
@@ -27,17 +27,17 @@ BaseException(private_ctor, const BaseException& exc,
 
 The `private_ctor` tag keeps this overload from colliding with the public ones. The public templates differ only in their first parameter, which is how they get dispatched:
 
-1. **Format constructors (no leading exc).** The variadic template at exception.h:81-83 takes `(function, filename, line, type, format, args...)`. This is what `THROW` hits. It forwards `default_exc()` (a static empty sentinel, exception.h:54-57) as the `exc` argument, so the private constructor uses the freshly captured `function_`/`filename_`/`line_`.
+1. **Format constructors (no leading exc).** The variadic template takes `(function, filename, line, type, format, args...)`. This is what `THROW` hits. It forwards `default_exc()` (a static empty sentinel) as the `exc` argument, so the private constructor uses the freshly captured `function_`/`filename_`/`line_`.
 
-2. **Exception-aware constructors (leading `const T*`).** The template at exception.h:84-86 takes `(const T* exc, function, filename, line, type, format, args...)` and is SFINAE-gated with `std::enable_if_t<std::is_base_of<BaseException, std::decay_t<T>>::value>`. This is what `RETHROW(type, ...)` hits, because `&exc` is a pointer to something derived from `BaseException`. It dereferences `exc` and passes it through.
+2. **Exception-aware constructors (leading `const T*`).** The template takes `(const T* exc, function, filename, line, type, format, args...)` and is SFINAE-gated with `std::enable_if_t<std::is_base_of<BaseException, std::decay_t<T>>::value>`. This is what `RETHROW(type, ...)` hits, because `&exc` is a pointer to something derived from `BaseException`. It dereferences `exc` and passes it through.
 
-3. **`void*` fallback (leading `const void*`).** exception.h:87-89 catches the case where the leading pointer is *not* a `BaseException` subclass (the SFINAE on overload 2 fails). It ignores the pointer and behaves like the format constructor, falling back to `default_exc()`. This keeps `RETHROW` from being a hard compile error if `exc` happens to be some unrelated pointer type.
+3. **`void*` fallback (leading `const void*`).** A third constructor template catches the case where the leading pointer is *not* a `BaseException` subclass (the SFINAE on overload 2 fails). It ignores the pointer and behaves like the format constructor, falling back to `default_exc()`. This keeps `RETHROW` from being a hard compile error if `exc` happens to be some unrelated pointer type.
 
-Each of these three has a non-template twin (exception.h:91-97) for the plain `std::string_view msg = ""` case with no format args, so a bare `THROW(Error, "boom")` doesn't need to instantiate the variadic path.
+Each of these three has a non-template twin for the plain `std::string_view msg = ""` case with no format args, so a bare `THROW(Error, "boom")` doesn't need to instantiate the variadic path.
 
 ### How RETHROW inherits the original location
 
-The private constructor decides whose location to keep (exception.cc:60-67):
+The private constructor decides whose location to keep:
 
 ```cpp
 function(exc.type.empty() ? function_ : exc.function),
@@ -49,7 +49,7 @@ If the incoming `exc` is the empty sentinel (`type` is empty, as it is for `THRO
 
 ## Formatting the message
 
-The private constructor formats up front: `message(vformat(format, args))` (exception.cc:62). `format_args`, `make_format_args`, and `vformat` are aliased to one of two backends, chosen automatically at compile time by a preprocessor cascade in the header (exception.h:36-50):
+The private constructor formats up front: `message(vformat(format, args))`. `format_args`, `make_format_args`, and `vformat` are aliased to one of two backends, chosen automatically at compile time by a preprocessor cascade in the header:
 
 ```cpp
 #if !defined(WITHOUT_FORMAT) && defined(__cpp_lib_format) && __has_include(<format>)
@@ -64,9 +64,9 @@ The private constructor formats up front: `message(vformat(format, args))` (exce
 
 The first arm is the default on C++20: if `<format>` is present and `__cpp_lib_format` is defined, the standard library does the formatting and there is no third-party dependency. Failing that, or when `WITHOUT_FORMAT` is defined explicitly, the passthrough arm `vformat` ignores the args and returns the format string verbatim, with `format_args` reduced to `const void*`.
 
-That two-way choice has to be consistent across translation units. Each backend declares a *different* `format_args` type, and `format_args` appears in the signature of the private constructor (exception.h:61). If the library is compiled with one backend and a consumer with another (for example, library on C++20 with `std::format`, consumer with `WITHOUT_FORMAT` or a pre-C++20 standard), the private constructor's mangled signature differs between the two and you get an ODR/ABI mismatch. This is why CMake propagates the C++ standard `PUBLIC`: keeping the standard the same on both sides keeps the same arm selected, and therefore the same declared types.
+That two-way choice has to be consistent across translation units. Each backend declares a *different* `format_args` type, and `format_args` appears in the signature of the private constructor. If the library is compiled with one backend and a consumer with another (for example, library on C++20 with `std::format`, consumer with `WITHOUT_FORMAT` or a pre-C++20 standard), the private constructor's mangled signature differs between the two and you get an ODR/ABI mismatch. This is why CMake propagates the C++ standard `PUBLIC`: keeping the standard the same on both sides keeps the same arm selected, and therefore the same declared types.
 
-`get_message()` returns the stored message, substituting the type name if the message came out empty (exception.cc:69-76). `get_context()` builds the location-prefixed string lazily and caches it in the `mutable context` member (exception.cc:79-92):
+`get_message()` returns the stored message, substituting the type name if the message came out empty. `get_context()` builds the location-prefixed string lazily and caches it in the `mutable context` member:
 
 ```cpp
 context.append(filename);
@@ -78,11 +78,11 @@ context.append(": ");
 context.append(get_message());
 ```
 
-Both `message` and `context` are `mutable` (exception.h:66-67) so the lazy fill works on a `const` exception, which is how you almost always hold one in a `catch`.
+Both `message` and `context` are `mutable` so the lazy fill works on a `const` exception, which is how you almost always hold one in a `catch`.
 
 ## The multiple-inheritance trick
 
-Each concrete type inherits both `BaseException` and a standard exception (exception.h:108-142):
+Each concrete type inherits both `BaseException` and a standard exception:
 
 ```cpp
 class Exception        : public BaseException, public std::runtime_error { ... };
@@ -98,7 +98,7 @@ Exception(Args&&... args)
     : BaseException(std::forward<Args>(args)...), std::runtime_error(message) { }
 ```
 
-`message` is the `BaseException` member, populated by the time the `std::runtime_error` subobject is initialized (base subobjects initialize in declaration order, `BaseException` first). The result is that one `throw Error(...)` is catchable as `Error`, as `Exception`, as `BaseException`, *and* as `std::runtime_error` / `std::exception`. `what()` returns the same text as `get_message()`. `Error` is a thin alias over `Exception`, and `SystemExit` is the one type that doesn't take a format message: it is constructed as `SystemExit(code)` and carries an `int code` (exception.h:115-119).
+`message` is the `BaseException` member, populated by the time the `std::runtime_error` subobject is initialized (base subobjects initialize in declaration order, `BaseException` first). The result is that one `throw Error(...)` is catchable as `Error`, as `Exception`, as `BaseException`, *and* as `std::runtime_error` / `std::exception`. `what()` returns the same text as `get_message()`. `Error` is a thin alias over `Exception`, and `SystemExit` is the one type that doesn't take a format message: it is constructed as `SystemExit(code)` and carries an `int code`.
 
 ## Design decisions
 

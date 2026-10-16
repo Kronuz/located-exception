@@ -1,0 +1,28 @@
+# located-exception: one throw, its site remembered, catchable two ways.
+# Render: d2 --layout elk --sketch --theme 302 docs/located-exception.d2 docs/located-exception.svg
+direction: right
+
+throw: THROW {
+  label: "THROW(OutOfRange,\n\"value {} out of range\", v)"
+}
+
+exc: OutOfRange {
+  label: "OutOfRange\nfile · line · function\nformatted message"
+}
+
+rethrow: RETHROW {
+  label: "RETHROW(Error, \"while …\")\nkeeps the original site"
+}
+
+catch1: "catch (const Error&)" {
+  label: "catch (const BaseException&)\nget_context()"
+}
+
+catch2: "catch (const std::out_of_range&)" {
+  label: "catch (const std::out_of_range&)\nwhat()"
+}
+
+throw -> exc
+exc -> rethrow {style.stroke-dash: 3}
+exc -> catch1
+exc -> catch2

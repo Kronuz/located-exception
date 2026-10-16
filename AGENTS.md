@@ -7,7 +7,9 @@ Notes for agents and contributors working in this repo. For internal design see 
 - `exception.h` — the public API: `BaseException`, the derived types (`Exception`, `Error`, `InvalidArgument`, `OutOfRange`, `SystemExit`), the formatting-backend cascade (`std::format` / passthrough), and the `THROW` / `RETHROW` macros.
 - `exception.cc` — out-of-line implementations: the constructors (including the private formatting constructor), `get_message()`, and `get_context()`. This file must be compiled and linked; the library is not header-only.
 - `test/test.cc` — a single self-contained smoke test (asserts only, no framework).
-- `CMakeLists.txt` — builds the static library, requests C++20 `PUBLIC` (so `std::format` is the backend), and wires the test when this repo is top-level.
+- `docs/API.md` — the API reference, the formatting backends, and caveats; `docs/located-exception.d2` is the README diagram's source.
+- `LICENSE` — MIT, Dubalu LLC.
+- `CMakeLists.txt` — builds the static library (alias `located_exception::located_exception`), requests C++20 `PUBLIC` (so `std::format` is the backend), and wires the test when this repo is top-level.
 
 ## Build & run the test
 
@@ -19,9 +21,9 @@ cmake --build build
 ctest --test-dir build
 ```
 
-The test target is only added when this repo is the top-level project (CMakeLists.txt:20), so consumers vendoring it via `FetchContent` won't build it.
+The test target is only added when this repo is the top-level project, so consumers vendoring it via `FetchContent` won't build it.
 
-Direct compilation, both backends. These build on the commands from the header comment of `test/test.cc` (test/test.cc:2-3):
+Direct compilation, both backends. These build on the commands from the header comment of `test/test.cc`:
 
 ```sh
 # Default: std::format on C++20, no dependency.
@@ -44,14 +46,14 @@ A passing run prints `located-exception OK: <context>` and exits 0; failure prin
 
 ## Load-bearing invariants
 
-- **The formatting backend must be consistent across the library and every consumer.** The backend is chosen automatically by a preprocessor cascade (exception.h:36-50): `std::format` when `<format>` and `__cpp_lib_format` are available, else a passthrough (also forced by `WITHOUT_FORMAT`). The two backends declare a *different* `format_args` type (`std::format_args` vs `const void*`), which appears in the private constructor signature, so a library built with one backend and a consumer with another is an ODR/ABI mismatch. The choice is keyed on the C++ standard and header availability, so CMake propagates `cxx_std_20` `PUBLIC` precisely so the standard (and thus the backend) can't drift between the two sides (CMakeLists.txt:11). Don't compile the library and a consumer with different standards, and don't set or unset `WITHOUT_FORMAT` on a single target by hand.
-- **`make_format_args` needs lvalues.** The constructors pass `args...` into `make_format_args(args...)` *without* `std::forward` (exception.h:83, 86, 89). This is required by `std::format`'s `make_format_args`, which takes lvalue references. Do not "tidy" it into `std::forward<Args>(args)...`; that reintroduces the rvalue temporaries it rejects.
-- **`RETHROW` reads a variable named `exc`** (exception.h:149). The macro hardcodes `&exc`, so the enclosing `catch` must bind to that name.
-- **Base init order matters.** Derived types build `BaseException` before the `std::` base and feed the latter from `BaseException::message` (exception.h:111). `BaseException` must stay the first-listed base.
+- **The formatting backend must be consistent across the library and every consumer.** The backend is chosen automatically by a preprocessor cascade: `std::format` when `<format>` and `__cpp_lib_format` are available, else a passthrough (also forced by `WITHOUT_FORMAT`). The two backends declare a *different* `format_args` type (`std::format_args` vs `const void*`), which appears in the private constructor signature, so a library built with one backend and a consumer with another is an ODR/ABI mismatch. The choice is keyed on the C++ standard and header availability, so CMake propagates `cxx_std_20` `PUBLIC` precisely so the standard (and thus the backend) can't drift between the two sides. Don't compile the library and a consumer with different standards, and don't set or unset `WITHOUT_FORMAT` on a single target by hand.
+- **`make_format_args` needs lvalues.** The constructors pass `args...` into `make_format_args(args...)` *without* `std::forward`. This is required by `std::format`'s `make_format_args`, which takes lvalue references. Do not "tidy" it into `std::forward<Args>(args)...`; that reintroduces the rvalue temporaries it rejects.
+- **`RETHROW` reads a variable named `exc`**. The macro hardcodes `&exc`, so the enclosing `catch` must bind to that name.
+- **Base init order matters.** Derived types build `BaseException` before the `std::` base and feed the latter from `BaseException::message`. `BaseException` must stay the first-listed base.
 
 ## How to extend: adding a new exception subclass
 
-Most additions look like the existing wrapped-standard types (exception.h:131-142). To add one that is also a `std::` exception:
+Most additions look like the existing wrapped-standard types. To add one that is also a `std::` exception:
 
 ```cpp
 class LengthError : public BaseException, public std::length_error {
@@ -62,14 +64,14 @@ public:
 };
 ```
 
-Keep `BaseException` first in the base list, forward the variadic args into it, and construct the `std::` base from `message`. If you don't need a standard-exception twin, derive from `Exception` instead (like `Error`, exception.h:122-126). No macro changes are needed: `THROW(LengthError, ...)` and `RETHROW(LengthError, ...)` work as soon as the type exists, because they stringize the type token and call its constructor.
+Keep `BaseException` first in the base list, forward the variadic args into it, and construct the `std::` base from `message`. If you don't need a standard-exception twin, derive from `Exception` instead (like `Error`). No macro changes are needed: `THROW(LengthError, ...)` and `RETHROW(LengthError, ...)` work as soon as the type exists, because they stringize the type token and call its constructor.
 
 If the new type is reusable and generic, it belongs here. If it is application-specific, define it in the consuming project, not in this library.
 
 ## Traps
 
-- Editing the constructor templates: it's easy to break the `THROW` / `RETHROW` dispatch. The three overloads (format / exc-aware / `void*` fallback) differ only by their first parameter and the SFINAE guard (exception.h:81-89). Touching the parameter lists can silently re-route `RETHROW` through the format path and lose location inheritance.
-- Under the passthrough backend (`WITHOUT_FORMAT`, or no `std::format` available), format placeholders are *not* interpolated; the format string is returned verbatim (exception.h:41-50). A test that asserts on an interpolated message will pass with `std::format` and fail (or assert) under the passthrough. Write assertions that hold in both modes, or guard them.
+- Editing the constructor templates: it's easy to break the `THROW` / `RETHROW` dispatch. The three overloads (format / exc-aware / `void*` fallback) differ only by their first parameter and the SFINAE guard. Touching the parameter lists can silently re-route `RETHROW` through the format path and lose location inheritance.
+- Under the passthrough backend (`WITHOUT_FORMAT`, or no `std::format` available), format placeholders are *not* interpolated; the format string is returned verbatim. A test that asserts on an interpolated message will pass with `std::format` and fail (or assert) under the passthrough. Write assertions that hold in both modes, or guard them.
 - `function` and `filename` are stored as raw `const char*`. They're fine because `__func__`/`__FILE__` have static storage, but don't start pointing them at temporaries.
 
 ## Provenance note

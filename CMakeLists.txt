@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(located_exception LANGUAGES CXX)
 
 add_library(located_exception exception.cc)
+add_library(located_exception::located_exception ALIAS located_exception)
 target_include_directories(located_exception PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # C++20 so message formatting uses std::format with no third-party dependency.
