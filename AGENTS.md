@@ -11,31 +11,32 @@ Notes for agents and contributors working in this repo. For internal design see 
 - `LICENSE` — MIT, Dubalu LLC.
 - `CMakeLists.txt` — builds the static library (alias `located_exception::located_exception`), requests C++20 `PUBLIC` (so `std::format` is the backend), and wires the test when this repo is top-level.
 
-## Build & run the test
+## Verification and benchmarks
 
-With CMake:
-
-```sh
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build
-```
-
-The test target is only added when this repo is the top-level project, so consumers vendoring it via `FetchContent` won't build it.
-
-Direct compilation, both backends. These build on the commands from the header comment of `test/test.cc`:
+CI (`.github/workflows/ci.yml`) calls the catalog's shared
+[`cmake.yml`](https://github.com/Kronuz/cpp-libraries/blob/main/.github/workflows/cmake.yml) on every push and nightly:
+CTest on Linux (x86-64 GCC and Clang, arm64), macOS (arm64, x86-64) and FreeBSD, then again under
+ASan+UBSan and TSan. The shared method is the catalog's
+[PERFORMANCE.md](https://github.com/Kronuz/cpp-libraries/blob/main/docs/PERFORMANCE.md).
 
 ```sh
-# Default: std::format on C++20, no dependency.
-c++ -std=c++20 -I.. test/test.cc exception.cc -o test && ./test
-
-# Zero-interpolation passthrough (pre-C++20, or to drop interpolation).
-c++ -std=c++17 -DWITHOUT_FORMAT -I.. test/test.cc exception.cc -o test && ./test
+cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
+# ASan+UBSan as CI's linux-asan-ubsan job runs it (Linux, Clang)
+CC=clang CXX=clang++ cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+  "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -D_GLIBCXX_ASSERTIONS" \
+  "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
+cmake --build build-asan && ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build-asan --output-on-failure
+# Both formatting backends by hand; CI builds only the std::format one
+c++ -std=c++20 -I. test/test.cc exception.cc -o build/test_format && build/test_format
+c++ -std=c++17 -DWITHOUT_FORMAT -I. test/test.cc exception.cc -o build/test_passthrough && build/test_passthrough
 ```
 
-Run both before declaring a change good. They exercise different code paths (`std::format` and the passthrough stub) and a change can pass one and break the other.
-
-A passing run prints `located-exception OK: <context>` and exits 0; failure prints `FAIL` and exits 1.
+Run both backends before declaring a change good: they take different code paths (`std::format`
+and the passthrough stub), and a change can pass one and break the other. A passing run prints
+`located-exception OK: <context>` and exits 0. The test uses `assert`, which a Release build compiles
+out; the default (empty) build type keeps it. The test target is added only when this repo
+is the top-level project, so consumers that use `FetchContent` do not build it. There is no
+bench, fuzz target or mutation script: the library makes no performance claim.
 
 ## Conventions
 
