@@ -7,7 +7,7 @@ Notes for agents and contributors working in this repo. For internal design see 
 - `exception.h` — the public API: `BaseException`, the derived types (`Exception`, `Error`, `InvalidArgument`, `OutOfRange`, `SystemExit`), the formatting-backend cascade (`std::format` / passthrough), and the `THROW` / `RETHROW` macros.
 - `exception.cc` — out-of-line implementations: the constructors (including the private formatting constructor), `get_message()`, and `get_context()`. This file must be compiled and linked; the library is not header-only.
 - `test/test.cc` — a single self-contained smoke test (asserts only, no framework).
-- `docs/API.md` — the API reference, the formatting backends, and caveats; `docs/located-exception.d2` is the README diagram's source.
+- `docs/API.md` — the API reference, the formatting backends, and caveats.
 - `LICENSE` — MIT, Dubalu LLC.
 - `CMakeLists.txt` — builds the static library (alias `located_exception::located_exception`), requests C++20 `PUBLIC` (so `std::format` is the backend), and wires the test when this repo is top-level.
 
