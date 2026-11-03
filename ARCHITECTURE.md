@@ -52,7 +52,7 @@ If the incoming `exc` is the empty sentinel (`type` is empty, as it is for `THRO
 The private constructor formats up front: `message(vformat(format, args))`. `format_args`, `make_format_args`, and `vformat` are aliased to one of two backends, chosen automatically at compile time by a preprocessor cascade in the header:
 
 ```cpp
-#if !defined(WITHOUT_FORMAT) && defined(__cpp_lib_format) && __has_include(<format>)
+#if !defined(WITHOUT_FORMAT) && (defined(__cpp_lib_format) || (defined(_LIBCPP_VERSION) && _LIBCPP_VERSION >= 170000)) && __has_include(<format>)
     #include <format>
     using std::format_args; using std::make_format_args; using std::vformat;
 #else
@@ -62,7 +62,7 @@ The private constructor formats up front: `message(vformat(format, args))`. `for
 #endif
 ```
 
-The first arm is the default on C++20: if `<format>` is present and `__cpp_lib_format` is defined, the standard library does the formatting and there is no third-party dependency. Failing that, or when `WITHOUT_FORMAT` is defined explicitly, the passthrough arm `vformat` ignores the args and returns the format string verbatim, with `format_args` reduced to `const void*`.
+The first arm is the default on C++20: if `<format>` is present and either `__cpp_lib_format` is defined or the library is libc++ 17 or later (which ships `<format>` without defining it), the standard library does the formatting and there is no third-party dependency. Failing that, or when `WITHOUT_FORMAT` is defined explicitly, the passthrough arm `vformat` ignores the args and returns the format string verbatim, with `format_args` reduced to `const void*`.
 
 That two-way choice has to be consistent across translation units. Each backend declares a *different* `format_args` type, and `format_args` appears in the signature of the private constructor. If the library is compiled with one backend and a consumer with another (for example, library on C++20 with `std::format`, consumer with `WITHOUT_FORMAT` or a pre-C++20 standard), the private constructor's mangled signature differs between the two and you get an ODR/ABI mismatch. This is why CMake propagates the C++ standard `PUBLIC`: keeping the standard the same on both sides keeps the same arm selected, and therefore the same declared types.
 

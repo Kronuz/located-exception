@@ -36,7 +36,7 @@ Because each type multiply-inherits both `BaseException` and a `std::` exception
 
 ## Formatting backends
 
-The formatting backend is picked automatically in `exception.h`: `std::format` when `<format>` and `__cpp_lib_format` are available (the C++20 default), else a no-op passthrough that returns the format string uninterpolated. There is no third-party dependency.
+The formatting backend is picked automatically in `exception.h`: `std::format` when `<format>` is available (`__cpp_lib_format`, or libc++ 17 and later, which lacks that macro) (the C++20 default), else a no-op passthrough that returns the format string uninterpolated. There is no third-party dependency.
 
 Define `WITHOUT_FORMAT` `PUBLIC` to force the passthrough and drop interpolation entirely (the format string is returned literally, args ignored). The passthrough is also selected automatically on a pre-C++20 toolchain that lacks `<format>`/`__cpp_lib_format`.
 

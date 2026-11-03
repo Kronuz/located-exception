@@ -38,7 +38,8 @@
 // <version> above is what makes __cpp_lib_format visible before this check: the
 // feature-test macro lives there, so without it libstdc++ (which, unlike libc++,
 // doesn't leak it in through other headers) would silently pick the passthrough.
-#if !defined(WITHOUT_FORMAT) && defined(__cpp_lib_format) && __has_include(<format>)
+// libc++ 17 and 18 ship a usable <format> but do not define __cpp_lib_format.
+#if !defined(WITHOUT_FORMAT) && (defined(__cpp_lib_format) || (defined(_LIBCPP_VERSION) && _LIBCPP_VERSION >= 170000)) && __has_include(<format>)
 	#include <format>
 	// std::format backend: interpolate the arguments into the format string.
 	template <typename... Args>
@@ -49,8 +50,7 @@
 		return std::vformat(format, std::make_format_args(args...));
 	}
 #else
-	// Passthrough backend (pre-C++20, WITHOUT_FORMAT, or a libc++ that ships <format>
-	// without advertising __cpp_lib_format): return the format string verbatim.
+	// Passthrough backend (pre-C++20, WITHOUT_FORMAT, or no usable <format>): return the format string verbatim.
 	template <typename... Args>
 	inline std::string interpolate(std::string_view format, Args&&...) {
 		return std::string(format);
